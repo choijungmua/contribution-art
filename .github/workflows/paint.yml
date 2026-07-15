@@ -2,7 +2,7 @@ name: Paint contribution graph
 
 on:
   schedule:
-    - cron: "17 12 * * *"
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -21,8 +21,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Add today's contribution pixels
-        run: ./paint.sh today
+      - name: Plan and add adaptive contribution pixels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./paint.sh sync
 
       - name: Push new commits
-        run: git push origin HEAD:main
+        run: |
+          git fetch origin main
+          git rebase --empty=keep origin/main
+          git push origin HEAD:main
