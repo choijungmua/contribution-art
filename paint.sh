@@ -5,7 +5,7 @@ readonly AUTHOR_NAME="${ART_AUTHOR_NAME:-CJM}"
 readonly AUTHOR_EMAIL="${ART_AUTHOR_EMAIL:-158401607+choijungmua@users.noreply.github.com}"
 readonly EPOCH_SUNDAY="${ART_EPOCH_SUNDAY:-2025-07-13}"
 readonly LIGHT_COMMITS="${ART_LIGHT_COMMITS:-1}"
-readonly DARK_COMMITS="${ART_DARK_COMMITS:-20}"
+readonly DARK_COMMITS="${ART_DARK_COMMITS:-30}"
 readonly PATTERN_WIDTH=20
 
 readonly -a PATTERN_ROWS=(
