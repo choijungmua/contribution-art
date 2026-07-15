@@ -161,25 +161,19 @@ load_pending() {
   if (( PENDING_HOURS == 0 )); then
     return 0
   fi
-  local subject remainder target_date sequence observed key floor
-  declare -A observed_counts=()
+  local subject remainder target_date sequence observed floor
   while IFS= read -r subject; do
     remainder="${subject#art-sync: }"
     read -r target_date sequence observed <<<"$remainder"
     if [[ "${observed:-}" =~ ^observed=([0-9]+)$ ]]; then
-      key="$target_date|${BASH_REMATCH[1]}"
-      observed_counts["$key"]=$(( ${observed_counts["$key"]:-0} + 1 ))
+      observed="${BASH_REMATCH[1]}"
+      floor="${PENDING_FLOORS["$target_date"]:-0}"
+      (( observed > floor )) && floor="$observed"
+      PENDING_FLOORS["$target_date"]=$(( floor + 1 ))
     else
       PENDING_TOTALS["$target_date"]=$(( ${PENDING_TOTALS["$target_date"]:-0} + 1 ))
     fi
-  done < <(git log --since="$PENDING_HOURS hours ago" --format='%s' --extended-regexp --grep='^art-sync: [0-9]{4}-[0-9]{2}-[0-9]{2} ')
-
-  for key in "${!observed_counts[@]}"; do
-    target_date="${key%%|*}"
-    observed="${key#*|}"
-    floor=$(( observed + observed_counts["$key"] ))
-    (( floor > ${PENDING_FLOORS["$target_date"]:-0} )) && PENDING_FLOORS["$target_date"]="$floor"
-  done
+  done < <(git log --reverse --since="$PENDING_HOURS hours ago" --format='%s' --extended-regexp --grep='^art-sync: [0-9]{4}-[0-9]{2}-[0-9]{2} ')
 }
 
 load_local_user_commits() {

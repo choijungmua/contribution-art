@@ -12,6 +12,12 @@ assert_contains() {
   [[ "$output" == *"$expected"* ]] || fail "expected output to contain: $expected\nactual output:\n$output"
 }
 
+assert_not_contains() {
+  local output="$1"
+  local unexpected="$2"
+  [[ "$output" != *"$unexpected"* ]] || fail "expected output not to contain: $unexpected\nactual output:\n$output"
+}
+
 repo="$(mktemp -d)"
 trap 'rm -rf "$repo"' EXIT
 cp paint.sh "$repo/paint.sh"
@@ -82,11 +88,13 @@ sync_count="$(git -C "$repo" log --format='%s' --grep='^art-sync:' | wc -l | tr 
 assert_contains "$sync_output" "2025-07-14: added 25 adaptive commit(s)"
 
 printf '%s\n' \
-  $'2025-07-14\t45\t45' \
+  $'2025-07-14\t35\t35' \
   $'2025-07-15\t32\t21' \
   $'2025-07-20\t52\t1' \
   $'2025-07-21\t0\t0' >"$fixture"
-reflected_output="$(
+git -C "$repo" add calendar.tsv
+git -C "$repo" commit --quiet -m "partial profile reflection"
+partial_output="$(
   cd "$repo"
   ART_TODAY=2025-07-21 \
   ART_CALENDAR_FILE="$fixture" \
@@ -94,6 +102,25 @@ reflected_output="$(
     ./paint.sh plan
 )"
 
-assert_contains "$reflected_output" $'2025-07-14\tletter\ttotal=45\trepo=45\tlocal=0\tuser=0\tpending=0\tadd=8'
+assert_contains "$partial_output" $'2025-07-14\tletter\ttotal=35\trepo=35\tlocal=0\tuser=0\tpending=10\tadd=8'
+
+(
+  cd "$repo"
+  ART_TODAY=2025-07-21 \
+  ART_CALENDAR_FILE="$fixture" \
+  ART_PENDING_HOURS=72 \
+  ART_BATCH_LIMIT=8 \
+    ./paint.sh sync >/dev/null
+)
+
+unchanged_output="$(
+  cd "$repo"
+  ART_TODAY=2025-07-21 \
+  ART_CALENDAR_FILE="$fixture" \
+  ART_PENDING_HOURS=72 \
+    ./paint.sh plan
+)"
+
+assert_not_contains "$unchanged_output" $'2025-07-14\tletter'
 
 printf 'PASS: adaptive plan uses displayed totals and user contributions\n'
