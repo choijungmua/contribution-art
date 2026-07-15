@@ -24,11 +24,20 @@ for index in $(seq 1 50); do
   git -C "$repo" commit --allow-empty --quiet -m "art: 2025-07-14 $index/50"
 done
 
+GIT_AUTHOR_NAME=CJM \
+GIT_AUTHOR_EMAIL=158401607+choijungmua@users.noreply.github.com \
+GIT_AUTHOR_DATE=2025-07-15T12:00:00Z \
+  git -C "$repo" commit --allow-empty --quiet -m "real work in art repository"
+GIT_AUTHOR_NAME=CJM \
+GIT_AUTHOR_EMAIL=158401607+choijungmua@users.noreply.github.com \
+GIT_AUTHOR_DATE=2025-07-20T12:00:00Z \
+  git -C "$repo" commit --allow-empty --quiet -m "more real work in art repository"
+
 fixture="$repo/calendar.tsv"
 printf '%s\n' \
   $'2025-07-14\t20\t20' \
-  $'2025-07-15\t32\t20' \
-  $'2025-07-20\t5\t0' \
+  $'2025-07-15\t32\t21' \
+  $'2025-07-20\t52\t1' \
   $'2025-07-21\t0\t0' >"$fixture"
 git -C "$repo" add paint.sh calendar.tsv
 git -C "$repo" commit --quiet -m fixture
@@ -41,10 +50,10 @@ output="$(
     ./paint.sh plan
 )"
 
-assert_contains "$output" $'2025-07-14\tletter\ttotal=20\tart=20\tuser=0\tpending=0\tadd=30'
-assert_contains "$output" $'2025-07-15\tletter\ttotal=32\tart=20\tuser=12\tpending=0\tadd=18'
-assert_contains "$output" $'2025-07-21\tbackground\ttotal=0\tart=0\tuser=0\tpending=0\tadd=1'
-assert_contains "$output" $'target=50\tplanned=49'
+assert_contains "$output" $'2025-07-14\tletter\ttotal=20\trepo=20\tlocal=0\tuser=0\tpending=0\tadd=33'
+assert_contains "$output" $'2025-07-15\tletter\ttotal=32\trepo=21\tlocal=1\tuser=12\tpending=0\tadd=21'
+assert_contains "$output" $'2025-07-21\tbackground\ttotal=0\trepo=0\tlocal=0\tuser=0\tpending=0\tadd=1'
+assert_contains "$output" $'target=53\tplanned=55'
 
 limited_output="$(
   cd "$repo"
@@ -55,8 +64,8 @@ limited_output="$(
     ./paint.sh plan
 )"
 
-assert_contains "$limited_output" $'2025-07-14\tletter\ttotal=20\tart=20\tuser=0\tpending=0\tadd=25'
-assert_contains "$limited_output" $'target=50\tplanned=25\tdeferred=24'
+assert_contains "$limited_output" $'2025-07-14\tletter\ttotal=20\trepo=20\tlocal=0\tuser=0\tpending=0\tadd=25'
+assert_contains "$limited_output" $'target=53\tplanned=25\tdeferred=30'
 
 sync_output="$(
   cd "$repo"

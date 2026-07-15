@@ -20,6 +20,8 @@ The script reads the live GitHub contribution calendar and the contributions
 already attributed to this repository. Their difference is treated as the
 user's real activity. Letter days are topped up to the adaptive dark target,
 while a background commit is added only when the day has no contribution.
+Recognized non-art commits in this repository are added back to the user's
+activity instead of being mistaken for generated art.
 
 Using GitHub's displayed total also repairs dates where an earlier large push
 was only partially reflected on the profile. Oldest deficits are handled first

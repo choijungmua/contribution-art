@@ -23,7 +23,8 @@ readonly -a PATTERN_ROWS=(
 )
 
 declare -A CALENDAR_TOTALS=()
-declare -A CALENDAR_ART=()
+declare -A CALENDAR_REPO_TOTALS=()
+declare -A LOCAL_USER_TOTALS=()
 declare -A PENDING_TOTALS=()
 declare -a CALENDAR_DATES=()
 
@@ -141,16 +142,16 @@ fetch_live_calendar() {
 
 load_calendar() {
   local calendar_file="$1"
-  local target_date total art extra
-  while IFS=$'\t' read -r target_date total art extra; do
+  local target_date total repo_total extra
+  while IFS=$'\t' read -r target_date total repo_total extra; do
     [[ -n "$target_date" ]] || continue
     [[ "$target_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "invalid calendar date: $target_date"
     [[ "$total" =~ ^[0-9]+$ ]] || die "invalid calendar total for $target_date"
-    [[ "$art" =~ ^[0-9]+$ ]] || die "invalid art total for $target_date"
+    [[ "$repo_total" =~ ^[0-9]+$ ]] || die "invalid repository total for $target_date"
     [[ -z "${extra:-}" ]] || die "invalid calendar row for $target_date"
     CALENDAR_DATES+=("$target_date")
     CALENDAR_TOTALS["$target_date"]="$total"
-    CALENDAR_ART["$target_date"]="$art"
+    CALENDAR_REPO_TOTALS["$target_date"]="$repo_total"
   done < <(sort -t $'\t' -k1,1 -u "$calendar_file")
   (( ${#CALENDAR_DATES[@]} > 0 )) || die "calendar is empty"
 }
@@ -167,19 +168,30 @@ load_pending() {
   done < <(git log --since="$PENDING_HOURS hours ago" --format='%s' --extended-regexp --grep='^art-sync: [0-9]{4}-[0-9]{2}-[0-9]{2} ')
 }
 
+load_local_user_commits() {
+  local author_date author_email subject target_date
+  while IFS=$'\t' read -r author_date author_email subject; do
+    [[ "$author_email" == "$AUTHOR_EMAIL" ]] || continue
+    [[ "$subject" != art:* && "$subject" != art-sync:* ]] || continue
+    target_date="${author_date:0:10}"
+    LOCAL_USER_TOTALS["$target_date"]=$(( ${LOCAL_USER_TOTALS["$target_date"]:-0} + 1 ))
+  done < <(git log --format='%aI%x09%ae%x09%s')
+}
+
 build_plan() {
   local plan_file="$1"
   local start="$2"
   local today="$3"
   local target="$DARK_COMMITS"
-  local target_date total art user pending effective kind desired needed add capacity
+  local target_date total repo_total local_user user pending effective kind desired needed add capacity
   local planned=0 deferred=0
 
   for target_date in "${CALENDAR_DATES[@]}"; do
     [[ "$target_date" < "$start" || "$target_date" > "$today" ]] && continue
     total="${CALENDAR_TOTALS["$target_date"]}"
-    art="${CALENDAR_ART["$target_date"]}"
-    user=$(( total - art ))
+    repo_total="${CALENDAR_REPO_TOTALS["$target_date"]}"
+    local_user="${LOCAL_USER_TOTALS["$target_date"]:-0}"
+    user=$(( total - repo_total + local_user ))
     (( user < 0 )) && user=0
     (( user + DARK_MARGIN > target )) && target=$(( user + DARK_MARGIN ))
   done
@@ -188,8 +200,9 @@ build_plan() {
   for target_date in "${CALENDAR_DATES[@]}"; do
     [[ "$target_date" < "$start" || "$target_date" > "$today" ]] && continue
     total="${CALENDAR_TOTALS["$target_date"]}"
-    art="${CALENDAR_ART["$target_date"]}"
-    user=$(( total - art ))
+    repo_total="${CALENDAR_REPO_TOTALS["$target_date"]}"
+    local_user="${LOCAL_USER_TOTALS["$target_date"]:-0}"
+    user=$(( total - repo_total + local_user ))
     (( user < 0 )) && user=0
     pending="${PENDING_TOTALS["$target_date"]:-0}"
     effective=$(( total + pending ))
@@ -208,8 +221,8 @@ build_plan() {
     (( add > capacity )) && add="$capacity"
     deferred=$(( deferred + needed - add ))
     (( add > 0 )) || continue
-    printf '%s\t%s\ttotal=%d\tart=%d\tuser=%d\tpending=%d\tadd=%d\n' \
-      "$target_date" "$kind" "$total" "$art" "$user" "$pending" "$add" | tee -a "$plan_file"
+    printf '%s\t%s\ttotal=%d\trepo=%d\tlocal=%d\tuser=%d\tpending=%d\tadd=%d\n' \
+      "$target_date" "$kind" "$total" "$repo_total" "$local_user" "$user" "$pending" "$add" | tee -a "$plan_file"
     planned=$(( planned + add ))
   done
   printf 'target=%d\tplanned=%d\tdeferred=%d\n' "$target" "$planned" "$deferred"
@@ -242,8 +255,8 @@ create_commits() {
 
 apply_plan() {
   local plan_file="$1"
-  local target_date kind total art user pending add
-  while IFS=$'\t' read -r target_date kind total art user pending add; do
+  local target_date kind total repo_total local_user user pending add
+  while IFS=$'\t' read -r target_date kind total repo_total local_user user pending add; do
     create_commits "$target_date" "${add#add=}"
   done <"$plan_file"
 }
@@ -275,6 +288,7 @@ main() {
     fetch_live_calendar "$calendar_file" "$start" "$today" "$temp_dir"
   fi
   load_calendar "$calendar_file"
+  load_local_user_commits
   load_pending
   build_plan "$plan_file" "$start" "$today"
   [[ "$mode" == "plan" ]] || apply_plan "$plan_file"
