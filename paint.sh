@@ -26,6 +26,7 @@ declare -A CALENDAR_TOTALS=()
 declare -A CALENDAR_REPO_TOTALS=()
 declare -A LOCAL_USER_TOTALS=()
 declare -A PENDING_TOTALS=()
+declare -A PENDING_FLOORS=()
 declare -a CALENDAR_DATES=()
 
 die() {
@@ -160,12 +161,25 @@ load_pending() {
   if (( PENDING_HOURS == 0 )); then
     return 0
   fi
-  local subject remainder target_date
+  local subject remainder target_date sequence observed key floor
+  declare -A observed_counts=()
   while IFS= read -r subject; do
     remainder="${subject#art-sync: }"
-    target_date="${remainder%% *}"
-    PENDING_TOTALS["$target_date"]=$(( ${PENDING_TOTALS["$target_date"]:-0} + 1 ))
+    read -r target_date sequence observed <<<"$remainder"
+    if [[ "${observed:-}" =~ ^observed=([0-9]+)$ ]]; then
+      key="$target_date|${BASH_REMATCH[1]}"
+      observed_counts["$key"]=$(( ${observed_counts["$key"]:-0} + 1 ))
+    else
+      PENDING_TOTALS["$target_date"]=$(( ${PENDING_TOTALS["$target_date"]:-0} + 1 ))
+    fi
   done < <(git log --since="$PENDING_HOURS hours ago" --format='%s' --extended-regexp --grep='^art-sync: [0-9]{4}-[0-9]{2}-[0-9]{2} ')
+
+  for key in "${!observed_counts[@]}"; do
+    target_date="${key%%|*}"
+    observed="${key#*|}"
+    floor=$(( observed + observed_counts["$key"] ))
+    (( floor > ${PENDING_FLOORS["$target_date"]:-0} )) && PENDING_FLOORS["$target_date"]="$floor"
+  done
 }
 
 load_local_user_commits() {
@@ -183,7 +197,7 @@ build_plan() {
   local start="$2"
   local today="$3"
   local target="$DARK_COMMITS"
-  local target_date total repo_total local_user user pending effective kind desired needed add capacity
+  local target_date total repo_total local_user user pending pending_floor effective kind desired needed add capacity
   local planned=0 deferred=0
 
   for target_date in "${CALENDAR_DATES[@]}"; do
@@ -205,6 +219,8 @@ build_plan() {
     user=$(( total - repo_total + local_user ))
     (( user < 0 )) && user=0
     pending="${PENDING_TOTALS["$target_date"]:-0}"
+    pending_floor="${PENDING_FLOORS["$target_date"]:-0}"
+    (( pending_floor > total )) && pending=$(( pending + pending_floor - total ))
     effective=$(( total + pending ))
     if is_letter_cell "$target_date"; then
       kind="letter"
@@ -236,6 +252,7 @@ existing_art_commits() {
 create_commits() {
   local target_date="$1"
   local add="$2"
+  local observed_total="$3"
   local existing author_stamp committer_stamp offset sequence
   existing="$(existing_art_commits "$target_date")"
   author_stamp="${target_date}T12:00:00+00:00"
@@ -248,7 +265,7 @@ create_commits() {
     GIT_COMMITTER_NAME="$AUTHOR_NAME" \
     GIT_COMMITTER_EMAIL="$AUTHOR_EMAIL" \
     GIT_COMMITTER_DATE="$committer_stamp" \
-      git commit --allow-empty --quiet -m "art-sync: $target_date $sequence"
+      git commit --allow-empty --quiet -m "art-sync: $target_date $sequence observed=$observed_total"
   done
   printf '%s: added %d adaptive commit(s)\n' "$target_date" "$add"
 }
@@ -257,7 +274,7 @@ apply_plan() {
   local plan_file="$1"
   local target_date kind total repo_total local_user user pending add
   while IFS=$'\t' read -r target_date kind total repo_total local_user user pending add; do
-    create_commits "$target_date" "${add#add=}"
+    create_commits "$target_date" "${add#add=}" "${total#total=}"
   done <"$plan_file"
 }
 

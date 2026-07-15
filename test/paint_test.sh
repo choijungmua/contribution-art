@@ -81,4 +81,19 @@ sync_count="$(git -C "$repo" log --format='%s' --grep='^art-sync:' | wc -l | tr 
 [[ "$(git -C "$repo" show -s --format='%as' HEAD)" == "2025-07-14" ]] || fail "expected target author date on adaptive commit"
 assert_contains "$sync_output" "2025-07-14: added 25 adaptive commit(s)"
 
+printf '%s\n' \
+  $'2025-07-14\t45\t45' \
+  $'2025-07-15\t32\t21' \
+  $'2025-07-20\t52\t1' \
+  $'2025-07-21\t0\t0' >"$fixture"
+reflected_output="$(
+  cd "$repo"
+  ART_TODAY=2025-07-21 \
+  ART_CALENDAR_FILE="$fixture" \
+  ART_PENDING_HOURS=72 \
+    ./paint.sh plan
+)"
+
+assert_contains "$reflected_output" $'2025-07-14\tletter\ttotal=45\trepo=45\tlocal=0\tuser=0\tpending=0\tadd=8'
+
 printf 'PASS: adaptive plan uses displayed totals and user contributions\n'
